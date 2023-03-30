@@ -15,6 +15,8 @@ class Input:
         self.__tree: DerivationTree = tree
         self.__oracle: Optional[OracleResult] = None
         self.__features: Optional[Dict] = None
+        self.__exec_feature: float = float()
+        self.__error_message: float = float()
         self.__fitness: float = float()
 
     @property
@@ -28,6 +30,13 @@ class Input:
     @property
     def features(self) -> Dict:
         return self.__features
+    
+    @property
+    def exec_feature(self) -> float:
+        return self.__exec_feature
+    @property
+    def error_message(self) -> str:
+        return self.__error_message
 
     @property
     def fitness(self) -> float:
@@ -40,6 +49,14 @@ class Input:
     @features.setter
     def features(self, features_: Dict):
         self.__features = features_
+
+    @exec_feature.setter
+    def exec_feature(self, exec_feature_: float):
+        self.__exec_feature = exec_feature_
+
+    @error_message.setter
+    def error_message(self, error_message: float):
+        self.__error_message = error_message
 
     @fitness.setter
     def fitness(self, fitness_: float):

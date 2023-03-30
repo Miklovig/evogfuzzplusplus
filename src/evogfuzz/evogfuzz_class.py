@@ -1,11 +1,11 @@
 import logging
-from typing import Callable, List, Union, Set, Tuple
+from typing import Callable, List, Union, Set, Tuple, Any, Optional
 from pathlib import Path
 from random import choice
 import numpy as np
 from enum import Enum
 from copy import deepcopy
-
+from types import FrameType
 from fuzzingbook.Grammars import Grammar
 from fuzzingbook.Parser import EarleyParser
 from fuzzingbook.ProbabilisticGrammarFuzzer import (
@@ -16,12 +16,17 @@ from fuzzingbook.ProbabilisticGrammarFuzzer import (
 from isla.derivation_tree import DerivationTree
 
 from evogfuzz.tournament_selection import Tournament
-from evogfuzz.fitness_functions import fitness_function_failure
+from evogfuzz.fitness_functions import fitness_function_except
+from evogfuzz.fitness_functions import fitness_function_memory
+from evogfuzz.fitness_functions import fitness_function_coverage
 from evogfuzz import helper
 from evogfuzz.oracle import OracleResult
 from evogfuzz.input import Input
 
-
+import sys
+import time
+import tracemalloc
+import inspect
 class GrammarType(Enum):
     MUTATED = "mutated"
     LEARNED = "learned"
@@ -29,8 +34,18 @@ class GrammarType(Enum):
     def __str__(self):
         return self.value
 
-
+def traceit(frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
+        """Trace program execution. To be passed to sys.settrace()."""
+        if event == 'line':
+            global coverage
+            function_name = frame.f_code.co_name
+            lineno = frame.f_lineno
+            coverage.append(lineno)
+        return traceit
+    
 class EvoGFuzz:
+
+    
     def __init__(
         self,
         grammar: Grammar,
@@ -38,10 +53,12 @@ class EvoGFuzz:
         inputs: List[str],
         fitness_function: Callable[
             [Input], float
-        ] = fitness_function_failure,
+        ],
+        fitnessType: str = "bug", 
         iterations: int = 10,
         working_dir: Path = None,
     ):
+        self.fitnessType = fitnessType
         self.grammar = grammar
         self._prop: Callable[[Input], OracleResult] = prop
         self.working_dir = working_dir
@@ -62,7 +79,6 @@ class EvoGFuzz:
             ],
             None,
         ] = fitness_function
-
         self._probabilistic_grammar_miner = ProbabilisticGrammarMiner(
             EarleyParser(self.grammar)
         )
@@ -79,11 +95,79 @@ class EvoGFuzz:
 
         # Apply patch to fuzzingbook
         helper.patch()
-
+    
     def setup(self):
-        for inp in self.inputs:
-            inp.oracle = self._prop(inp)
 
+        match self.fitnessType: #fitness_function
+            case "cputime": #fitness_function_memory
+                for inp in self.inputs:
+                #    inp.oracle, inp.exec_feature= self._prop(inp)
+                    st = time.process_time()
+                    try:
+                        self._prop(inp)
+                        ct = time.process_time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
+                    except:
+                        ct = time.process_time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
+
+            case "wctime":
+                for inp in self.inputs:
+                #    inp.oracle, inp.exec_feature= self._prop(inp)
+                    st = time.time()
+                    try:
+                        self._prop(inp)
+                        ct = time.time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
+                    except:
+                        ct = time.time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
+
+            case "bug":
+                for inp in self.inputs:
+                #    inp.oracle = self._prop(inp)
+                    if(self._prop(inp)):
+                        inp.oracle = OracleResult.BUG
+                    else:
+                        inp.oracle = OracleResult.NO_BUG
+            case "exception":
+                #for inp in self.inputs:
+                #    inp.oracle, inp.error_message = self._prop(inp)
+
+                for inp in self.inputs:
+                    try:
+                        self._prop(inp)
+                        inp.oracle, inp.error_message = OracleResult.NO_BUG, "no_ex_triggered"
+                    except Exception as e: 
+                        inp.oracle, inp.error_message = OracleResult.BUG, sys.exc_info()[0]
+            case "memory":
+                 for inp in self.inputs:
+                    try:
+                        tracemalloc.start()
+                        tracemalloc.reset_peak()
+                        self._prop(inp)
+                        size, peak= tracemalloc.get_traced_memory()
+                        tracemalloc.stop
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, peak
+                    except Exception as e: 
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, None
+            case "coverage":
+                 for inp in self.inputs:
+                    try:
+                        global coverage
+                        coverage = []
+                        sys.settrace(traceit)  # Turn on
+                        self._prop(inp)
+                        sys.settrace(None) #turn off
+                        code = inspect.getsource(self._prop)
+                        lengthOfCoverage = len(coverage)
+                        lengthOfCode = len(code.splitlines())
+                        percentCovered = lengthOfCoverage / lengthOfCode
+                        logging.info(f"in prop setup {lengthOfCoverage} and coverage: {lengthOfCoverage}")
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, percentCovered
+                    except Exception as e: 
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, e
+        
         probabilistic_grammar = self._learn_probabilistic_grammar(self.inputs)
         self._probabilistic_grammars.append(
             (deepcopy(probabilistic_grammar), GrammarType.LEARNED, -1)
@@ -111,13 +195,74 @@ class EvoGFuzz:
 
     def _loop(self, test_inputs: Set[Input]):
         # obtain labels, execute samples (Initial Step, Activity 5)
-        for inp in test_inputs:
-            inp.oracle = self._prop(inp)
+        match self.fitnessType:
+            case "cputime":
+                for inp in test_inputs:
+                #    inp.oracle, inp.exec_feature= self._prop(inp)
+                    st = time.process_time()
+                    try:
+                        self._prop(inp)
+                        ct = time.process_time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
+                    except:
+                        ct = time.process_time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
 
+            case "wctime":
+                for inp in test_inputs:
+                #    inp.oracle, inp.exec_feature= self._prop(inp)
+                    st = time.time()
+                    try:
+                        self._prop(inp)
+                        ct = time.time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
+                    except:
+                        ct = time.time() - st
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
+            case "bug":
+                for inp in test_inputs:
+                    try:
+                        self._prop(inp)
+                        inp.oracle == OracleResult.NO_BUG
+                    except Exception as e: 
+                        inp.oracle == OracleResult.BUG
+            case "exception":
+                for inp in test_inputs:
+                    try:
+                        self._prop(inp)
+                        inp.oracle, inp.error_message = OracleResult.NO_BUG, "no_ex_triggered"
+                    except Exception as e: 
+                        inp.oracle, inp.error_message = OracleResult.BUG, sys.exc_info()[0]
+            case "memory":
+                 for inp in test_inputs:
+                    try:
+                        tracemalloc.start()
+                        tracemalloc.reset_peak()
+                        self._prop(inp)
+                        size, peak= tracemalloc.get_traced_memory()
+                        tracemalloc.stop
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, peak
+                    except Exception as e: 
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, None
+            case "coverage":
+                 for inp in test_inputs:
+                    try:
+                        global coverage
+                        coverage = []
+                        sys.settrace(traceit)  # Turn on
+                        self._prop(inp)
+                        sys.settrace(None) #turn off
+                        code = inspect.getsource(self._prop)
+                        lengthOfCoverage = len(coverage)
+                        lengthOfCode = len(code.splitlines())
+                        logging.info(f"in prop {lengthOfCode} and coverage: {lengthOfCoverage}")
+                        percentCovered = lengthOfCoverage / lengthOfCode
+                        inp.oracle, inp.exec_feature = OracleResult.NO_BUG, percentCovered
+                    except Exception as e: 
+                        inp.oracle, inp.exec_feature = OracleResult.BUG, e
         # determine fitness of individuals
         for inp in test_inputs:
             inp.fitness = self.fitness_function(inp)
-
         # select fittest individuals
         fittest_individuals: Set[Input] = self._select_fittest_individuals(test_inputs)
 
