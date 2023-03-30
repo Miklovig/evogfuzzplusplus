@@ -40,7 +40,8 @@ def traceit(frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
             global coverage
             function_name = frame.f_code.co_name
             lineno = frame.f_lineno
-            coverage.append(lineno)
+            if(function_name =="Taschenrechner_Coverage"):
+                coverage.append(lineno)
         return traceit
     
 class EvoGFuzz:
@@ -255,7 +256,7 @@ class EvoGFuzz:
                         code = inspect.getsource(self._prop)
                         lengthOfCoverage = len(coverage)
                         lengthOfCode = len(code.splitlines())
-                        logging.info(f"in prop {lengthOfCode} and coverage: {lengthOfCoverage}")
+                        logging.info(f"in prop {lengthOfCode} and coverage: {lengthOfCoverage} for {inp}")
                         percentCovered = lengthOfCoverage / lengthOfCode
                         inp.oracle, inp.exec_feature = OracleResult.NO_BUG, percentCovered
                     except Exception as e: 

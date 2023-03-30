@@ -67,7 +67,7 @@ def fitness_function_coverage(
     return get_fitness_coverage(test_input)
 
 def get_fitness_coverage(test_input: Input) -> int:
-    logging.info(f"in coverage: {test_input.oracle}, {test_input.exec_feature}")
+    logging.info(f"in coverage: {test_input.oracle}, {test_input} and cov: {test_input.exec_feature}")
     if (test_input.oracle == OracleResult.BUG):
         return 0
     else:
