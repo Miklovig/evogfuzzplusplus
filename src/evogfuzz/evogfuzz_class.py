@@ -14,7 +14,7 @@ from fuzzingbook.ProbabilisticGrammarFuzzer import (
     ProbabilisticGrammarFuzzer,
 )
 from isla.derivation_tree import DerivationTree
-
+import openpyxl
 from evogfuzz.tournament_selection import Tournament
 from evogfuzz.fitness_functions import fitness_function_except
 from evogfuzz.fitness_functions import fitness_function_memory
@@ -40,7 +40,7 @@ def traceit(frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
             global coverage
             function_name = frame.f_code.co_name
             lineno = frame.f_lineno
-            if(function_name =="Taschenrechner_Coverage"):
+            if(function_name =="buggy_function"):
                 coverage.append(lineno)
         return traceit
     
@@ -126,11 +126,12 @@ class EvoGFuzz:
 
             case "bug":
                 for inp in self.inputs:
-                #    inp.oracle = self._prop(inp)
-                    if(self._prop(inp)):
-                        inp.oracle = OracleResult.BUG
-                    else:
+                    try:
+                        self._prop(inp)
                         inp.oracle = OracleResult.NO_BUG
+                    except:
+                        inp.oracle = OracleResult.BUG
+            
             case "exception":
                 #for inp in self.inputs:
                 #    inp.oracle, inp.error_message = self._prop(inp)
@@ -177,14 +178,28 @@ class EvoGFuzz:
 
         return initial_population
 
-    def fuzz(self):
-        logging.info("Fuzzing with EvoGFuzz")
-        new_population: Set[Input] = self.setup()
-        while self._do_more_iterations():
-            logging.info(f"Starting iteration {self._iteration}")
-            new_population = self._loop(new_population)
-            self._iteration = self._iteration + 1
-        self._finalize()
+    def _save_population(self, column_name, inputs):
+            # Load the workbook or create a new one if it doesn't exist
+            try:
+                wb = openpyxl.load_workbook('populations.xlsx')
+            except FileNotFoundError:
+                wb = openpyxl.Workbook()
+            
+            # Select the active worksheet or create a new one if it doesn't exist
+            try:
+                ws = wb['Sheet1']
+            except KeyError:
+                ws = wb.create_sheet('Sheet1')
+
+            # Add the column name to the first row
+            ws.cell(row=1, column=ws.max_column+1, value=str(column_name)+". loop")
+
+            # Add the inputs to the column
+            for i, input_value in enumerate(inputs):
+                ws.cell(row=i+2, column=ws.max_column, value=str(input_value))
+
+            # Save the workbook
+            wb.save('populations.xlsx')
 
     def optimize(self) -> Grammar:
         logging.info("Optimizing with EvoGFuzz")
@@ -193,6 +208,19 @@ class EvoGFuzz:
 
         # Return best Grammar
         return Grammar
+            
+    def fuzz(self):
+        logging.info("Fuzzing with EvoGFuzz")
+        new_population: Set[Input] = self.setup()
+        while self._do_more_iterations():
+            logging.info(f"Starting iteration {self._iteration}")
+            new_population = self._loop(new_population)
+            if(self._iteration %2 == 0):
+                self._save_population(self._iteration, new_population)
+            self._iteration = self._iteration + 1
+        if(self._iteration %2 == 0):
+                self._save_population(self._iteration, new_population)
+        self._finalize()
 
     def _loop(self, test_inputs: Set[Input]):
         # obtain labels, execute samples (Initial Step, Activity 5)
@@ -224,9 +252,9 @@ class EvoGFuzz:
                 for inp in test_inputs:
                     try:
                         self._prop(inp)
-                        inp.oracle == OracleResult.NO_BUG
+                        inp.oracle = OracleResult.NO_BUG
                     except Exception as e: 
-                        inp.oracle == OracleResult.BUG
+                        inp.oracle = OracleResult.BUG
             case "exception":
                 for inp in test_inputs:
                     try:
@@ -281,6 +309,7 @@ class EvoGFuzz:
         return self._generate_input_files(mutated_grammar)
 
     def _do_more_iterations(self):
+        #hier timer gucken
         if -1 == self._max_iterations:
             return True
         if self._iteration >= self._max_iterations:
@@ -364,7 +393,6 @@ class EvoGFuzz:
         logging.info("Final Grammar:")
 
         final_grammar = self._get_latest_grammar()
-
         for rule in final_grammar:
             logging.info(rule.ljust(30) + str(final_grammar[rule]))
 

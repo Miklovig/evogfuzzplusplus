@@ -8,8 +8,9 @@ def fitness_function_failure(
     return get_fitness(test_input)
 
 def get_fitness(test_input: Input) -> int:
+    logging.info(f"in failure: {test_input.oracle} for the input {test_input}")
     if test_input.oracle == OracleResult.BUG:
-        return 1
+        return 10
     else:
         return 0
     
@@ -40,7 +41,7 @@ def fitness_function_except(
 
 def get_fitness_except(test_input: Input) -> int:
     if (test_input.error_message == ValueError):
-        return 1
+        return 10
     else:
         return 0
     
