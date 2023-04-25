@@ -22,7 +22,7 @@ from evogfuzz.fitness_functions import fitness_function_coverage
 from evogfuzz import helper
 from evogfuzz.oracle import OracleResult
 from evogfuzz.input import Input
-
+import json
 import sys
 import time
 import tracemalloc
@@ -55,10 +55,14 @@ class EvoGFuzz:
         fitness_function: Callable[
             [Input], float
         ],
-        fitnessType: str = "bug", 
+        fitnessType: str = "failure", 
+        which_rerun: int = 1,
+        with_mutations: bool = True,
         iterations: int = 10,
         working_dir: Path = None,
     ):
+        self.which_rerun = which_rerun
+        self.with_mutations = with_mutations
         self.fitnessType = fitnessType
         self.grammar = grammar
         self._prop: Callable[[Input], OracleResult] = prop
@@ -124,7 +128,7 @@ class EvoGFuzz:
                         ct = time.time() - st
                         inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
 
-            case "bug":
+            case "failure":
                 for inp in self.inputs:
                     try:
                         self._prop(inp)
@@ -165,7 +169,6 @@ class EvoGFuzz:
                         lengthOfCoverage = len(coverage)
                         lengthOfCode = len(code.splitlines())
                         percentCovered = lengthOfCoverage / lengthOfCode
-                        logging.info(f"in prop setup {lengthOfCoverage} and coverage: {lengthOfCoverage}")
                         inp.oracle, inp.exec_feature = OracleResult.NO_BUG, percentCovered
                     except Exception as e: 
                         inp.oracle, inp.exec_feature = OracleResult.BUG, e
@@ -181,15 +184,15 @@ class EvoGFuzz:
     def _save_population(self, column_name, inputs):
             # Load the workbook or create a new one if it doesn't exist
             try:
-                wb = openpyxl.load_workbook('populations.xlsx')
+                wb = openpyxl.load_workbook(f'{self.fitnessType}.xlsx')
             except FileNotFoundError:
                 wb = openpyxl.Workbook()
             
             # Select the active worksheet or create a new one if it doesn't exist
             try:
-                ws = wb['Sheet1']
+                ws = wb[f'{self.which_rerun}. run']
             except KeyError:
-                ws = wb.create_sheet('Sheet1')
+                ws = wb.create_sheet(f'{self.which_rerun}. run')
 
             # Add the column name to the first row
             ws.cell(row=1, column=ws.max_column+1, value=str(column_name)+". loop")
@@ -199,7 +202,7 @@ class EvoGFuzz:
                 ws.cell(row=i+2, column=ws.max_column, value=str(input_value))
 
             # Save the workbook
-            wb.save('populations.xlsx')
+            wb.save(f'{self.fitnessType}.xlsx')
 
     def optimize(self) -> Grammar:
         logging.info("Optimizing with EvoGFuzz")
@@ -211,17 +214,68 @@ class EvoGFuzz:
             
     def fuzz(self):
         logging.info("Fuzzing with EvoGFuzz")
+        best_grammar_counter = 0
         new_population: Set[Input] = self.setup()
         while self._do_more_iterations():
             logging.info(f"Starting iteration {self._iteration}")
             new_population = self._loop(new_population)
+
+            this_round_counter = self._check_best_round(new_population)
+            if(best_grammar_counter<this_round_counter):
+                best_grammar_counter = this_round_counter
+                best_grammar = self._probabilistic_grammars[-1][0]
+                iteration = self._iteration
+
             if(self._iteration %2 == 0):
                 self._save_population(self._iteration, new_population)
             self._iteration = self._iteration + 1
+
         if(self._iteration %2 == 0):
                 self._save_population(self._iteration, new_population)
+        self._save_grammars_to_text(best_grammar, iteration)
         self._finalize()
 
+
+    def _save_grammars_to_text(self, grammar, iteration):
+
+        with open(f'{self.fitnessType}_grammars.txt', 'a') as f:
+            f.write(f"Results from the {self.which_rerun}. rerun\n\n")
+            f.write("First grammar:\n")
+            json.dump(self._probabilistic_grammars[0][0], f)
+            f.write('\n\n')
+            f.write(f"Best grammar: {iteration}\n")
+            json.dump(grammar, f)
+            f.write('\n')
+            f.write("Last grammar: \n")
+            json.dump(self._probabilistic_grammars[-1][0], f)
+            f.write('\n\n')
+
+
+    def _check_best_round(self, inputs):
+        counter = 0
+        for input in inputs:
+            inp = str(input)
+            match self.fitnessType:
+                case "memory":
+                    if ( "mem" in inp):
+                        counter = counter+1   
+                case "cputime":
+                    if ("cpu" in inp):                     
+                        counter = counter+1
+                case "wctime":
+                    if ( "time" in inp):
+                        counter = counter+1
+                case "coverage":
+                    if ("cov" in inp):
+                        counter = counter+1
+                case "failure":
+                    if ("error" in inp or "exception" in inp):
+                        counter = counter+1
+                case "exception":
+                    if ("exception" in inp):
+                        counter = counter+1
+        return counter
+            
     def _loop(self, test_inputs: Set[Input]):
         # obtain labels, execute samples (Initial Step, Activity 5)
         match self.fitnessType:
@@ -248,7 +302,7 @@ class EvoGFuzz:
                     except:
                         ct = time.time() - st
                         inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
-            case "bug":
+            case "failure":
                 for inp in test_inputs:
                     try:
                         self._prop(inp)
@@ -284,7 +338,6 @@ class EvoGFuzz:
                         code = inspect.getsource(self._prop)
                         lengthOfCoverage = len(coverage)
                         lengthOfCode = len(code.splitlines())
-                        logging.info(f"in prop {lengthOfCode} and coverage: {lengthOfCoverage} for {inp}")
                         percentCovered = lengthOfCoverage / lengthOfCode
                         inp.oracle, inp.exec_feature = OracleResult.NO_BUG, percentCovered
                     except Exception as e: 
@@ -300,13 +353,18 @@ class EvoGFuzz:
         self._probabilistic_grammars.append(
             (deepcopy(probabilistic_grammar), GrammarType.LEARNED, -1)
         )
-
+        #HERE
         # mutate grammar
-        mutated_grammar = self._mutate_grammar(probabilistic_grammar)
-        self._probabilistic_grammars.append((mutated_grammar, GrammarType.MUTATED, -1))
-
-        # generate new population
-        return self._generate_input_files(mutated_grammar)
+        if(self.with_mutations):
+             # generate new population
+            mutated_grammar = self._mutate_grammar(probabilistic_grammar)
+            self._probabilistic_grammars.append((mutated_grammar, GrammarType.MUTATED, -1))
+            return self._generate_input_files(mutated_grammar)
+        else:
+            return self._generate_input_files(probabilistic_grammar)
+       
+        #return self._generate_input_files(_probabilistic_grammar)
+       
 
     def _do_more_iterations(self):
         #hier timer gucken
