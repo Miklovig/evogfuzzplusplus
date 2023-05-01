@@ -40,7 +40,7 @@ def traceit(frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
             global coverage
             function_name = frame.f_code.co_name
             lineno = frame.f_lineno
-            if(function_name =="buggy_function"):
+            if(function_name =="buggy_function_cov"):
                 coverage.append(lineno)
         return traceit
     
