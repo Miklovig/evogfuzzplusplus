@@ -184,7 +184,7 @@ class EvoGFuzz:
     def _save_population(self, column_name, inputs):
             # Load the workbook or create a new one if it doesn't exist
             try:
-                wb = openpyxl.load_workbook(f'{self.fitnessType}.xlsx')
+                wb = openpyxl.load_workbook(f'{self.fitnessType}_without_mutation.xlsx')
             except FileNotFoundError:
                 wb = openpyxl.Workbook()
             
@@ -202,7 +202,7 @@ class EvoGFuzz:
                 ws.cell(row=i+2, column=ws.max_column, value=str(input_value))
 
             # Save the workbook
-            wb.save(f'{self.fitnessType}.xlsx')
+            wb.save(f'{self.fitnessType}_without_mutation.xlsx')
 
     def optimize(self) -> Grammar:
         logging.info("Optimizing with EvoGFuzz")
@@ -238,7 +238,7 @@ class EvoGFuzz:
 
     def _save_grammars_to_text(self, grammar, iteration):
 
-        with open(f'{self.fitnessType}_grammars.txt', 'a') as f:
+        with open(f'{self.fitnessType}_grammars_without_mutation.txt', 'a') as f:
             f.write(f"Results from the {self.which_rerun}. rerun\n\n")
             f.write("First grammar:\n")
             json.dump(self._probabilistic_grammars[0][0], f)
