@@ -61,6 +61,7 @@ class EvoGFuzz:
         iterations: int = 10,
         working_dir: Path = None,
     ):
+        self.start_time = time.time()
         self.which_rerun = which_rerun
         self.with_mutations = with_mutations
         self.fitnessType = fitnessType
@@ -370,8 +371,8 @@ class EvoGFuzz:
         #hier timer gucken
         if -1 == self._max_iterations:
             return True
-        if self._iteration >= self._max_iterations:
-            logging.info("Terminate due to maximal iterations reached")
+        if self._iteration >= self._max_iterations or time.time() - self.start_time >= 600:
+            logging.info("Terminate due to maximal iterations or 10 minutes reached")
             return False
         return True
 
