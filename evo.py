@@ -51,7 +51,7 @@ def main():
     with open('inital_inputs.txt', 'r') as f:
         INITIAL_INPUTS = json.load(f)
 
-    for i in range(2):
+    for i in range(30):
         run = i + 1
         epp = EvoGFuzz(
             GRAMMAR_BUGGY_FUNCTION,
@@ -60,7 +60,7 @@ def main():
             fitness_function=fit_time,
             fitnessType="wctime",
             which_rerun=run,
-            iterations=30,
+            iterations=30000,
             with_mutations=False,
             working_dir=None,
         )
