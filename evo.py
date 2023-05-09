@@ -48,7 +48,7 @@ def buggy_function(inp):
 
 def main():
    
-    with open('inital_inputs.txt', 'r') as f:
+    with open('initial_inputs.txt', 'r') as f:
         INITIAL_INPUTS = json.load(f)
 
     for i in range(30):
