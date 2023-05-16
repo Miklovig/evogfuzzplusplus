@@ -285,8 +285,9 @@ class EvoGFuzz:
                         self._prop(inp)
                         ct = time.process_time() - st
                         inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
-                    except:
+                    except Exception as e:
                         ct = time.process_time() - st
+                        #logging.info(f"ex thrown{e}")
                         inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
 
             case "wctime":
@@ -297,8 +298,9 @@ class EvoGFuzz:
                         self._prop(inp)
                         ct = time.time() - st
                         inp.oracle, inp.exec_feature = OracleResult.NO_BUG, round(ct*10000, 4)
-                    except:
+                    except Exception as e:
                         ct = time.time() - st
+                        #logging.info(f"ex thrown{e}")
                         inp.oracle, inp.exec_feature = OracleResult.BUG, round(ct*10000, 4)
             case "failure":
                 for inp in test_inputs:

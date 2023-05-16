@@ -24,6 +24,7 @@ def fitness_function_time(
 def get_fitness_time(test_input: Input) -> int:
     #if its a bug, then we dont run the whole app, but crash somewhere in the middle
     #so it has to be zero to elliminate those cases
+    #logging.info(f"i get here but {test_input.exec_feature} with {test_input} and {test_input.oracle}")
     if test_input.oracle == OracleResult.BUG:
         return 0
     else:

@@ -4,12 +4,16 @@ from src.evogfuzz.fitness_functions import (
 )
 from fuzzingbook.Parser import EarleyParser, tree_to_string, DerivationTree
 from fuzzingbook.Grammars import Grammar, simple_grammar_fuzzer
+from fuzzingbook.GeneratorGrammarFuzzer import ProbabilisticGeneratorGrammarFuzzer
 import json
 import time
+import subprocess
+import logging
+from importlib import reload  # Not needed in Python 2
 
-GRAMMAR_BUGGY_FUNCTION =  {
+GRAMMAR_BUGGY_FUNCTION3 : Grammar =  {
        "<start>":
-            ["<arith>"],
+            ["<arith>"], 
         "<arith>":
             ["cov(<expr>)", "mem(<expr>)", "cpu(<expr>)", "error(<expr>)", "time(<expr>)","exception(<expr>)"],
         "<expr>":
@@ -19,52 +23,34 @@ GRAMMAR_BUGGY_FUNCTION =  {
             ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     }
-def buggy_function(inp):
-    inp = str(inp)
-    bigNumber= 1
-        
-        #raise ValueError("Input number must be greater than 0")
-    if ("mem" in inp):
-        # Simulate high memory usage
-        bigList = sum(list(range(10000)))
-    if ("cpu" in inp):
-        # Simulate high CPU usage
-        i=0
-        while i < 10000:
-            bigNumber = bigNumber * i
-            i= i+1
-    if ("time" in inp):
-        # Simulate high time usage
-        time.sleep(0.1)
-    if ("cov" in inp):
-        #Simulate more lines for coverage testing
-        doSomething = 1
-    if ("error" in inp):
-         # Simulate TypeError
-        raise TypeError("TypeError been thrown")
-    if ("exception" in inp):
-         # Simulate ValueError
-        raise ValueError("ValueError been thrown")
+def sub_buggy_c(inp):
+
+    # Compile the C program
+    # Execute the compiled C program with specified inputs
+    result = subprocess.run(["./buggy_evo", str(inp)],  capture_output=True)
+    logging.info(result.stdout)
+
 
 def main():
    
-    with open('initial_inputs.txt', 'r') as f:
-        INITIAL_INPUTS = json.load(f)
+    INITIAL_INPUTS = ["time(5)", "time(8)", "exception(3)", "cov(6)", "time(3)", "time(68)", "time(22)", "cpu(2)", "mem(2)", "cpu(13)", "exception(7)", "cov(15)", "exception(34)", "exception(92)"]
 
-    for i in range(30):
+
+    for i in range(2):
         run = i + 1
         epp = EvoGFuzz(
-            GRAMMAR_BUGGY_FUNCTION,
-            buggy_function,
+            GRAMMAR_BUGGY_FUNCTION3,
+            sub_buggy_c,
             INITIAL_INPUTS,
             fitness_function=fit_time,
-            fitnessType="wctime",
+            fitnessType="cputime",
             which_rerun=run,
             iterations=30000,
-            with_mutations=False,
+            with_mutations=True,
             working_dir=None,
-        )
+            )
         epp.fuzz()
+        print(f"Done with the {i}. run")
 
 
 if __name__ == "__main__":
