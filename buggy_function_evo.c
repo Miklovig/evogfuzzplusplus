@@ -49,7 +49,7 @@ void buggy_function(char* inp) {
         str_copy[len] = '\0';
         perror(str_copy);
         free(str_copy);
-        // exit(1);
+        exit(1);
         return;
     }
     if (strstr(str, "exception") != NULL) {
@@ -62,7 +62,7 @@ void buggy_function(char* inp) {
         str_copy[len] = '\0';
         perror(str_copy);
         free(str_copy);
-        // exit(1);
+         exit(1);
         return;
     }
 }
