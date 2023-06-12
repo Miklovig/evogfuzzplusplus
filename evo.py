@@ -25,10 +25,11 @@ GRAMMAR_BUGGY_FUNCTION3 : Grammar =  {
     }
 def sub_buggy_c(inp):
 
-    # Compile the C program
-    # Execute the compiled C program with specified inputs
     result = subprocess.run(["./buggy_evo", str(inp)],  capture_output=True)
-    logging.info(result.stdout)
+    if result.returncode == 1:
+        logging.info("yas")
+        raise TypeError("TypeError been thrown")
+    logging.info(result)
 
 
 def main():
@@ -45,7 +46,7 @@ def main():
             fitness_function=fit_time,
             fitnessType="cputime",
             which_rerun=run,
-            iterations=30000,
+            iterations=30,
             with_mutations=True,
             working_dir=None,
             )
